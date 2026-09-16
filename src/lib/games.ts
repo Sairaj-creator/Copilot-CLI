@@ -50,10 +50,26 @@ function baseGamesQuery(db: Database) {
         .leftJoin(publishers, eq(games.publisherId, publishers.id));
 }
 
-/** All games ordered by title. */
-export async function getAllGames(db: Database): Promise<Game[]> {
-    const rows = await baseGamesQuery(db).orderBy(asc(games.title));
+/** All games ordered by title, optionally filtered by publisher. */
+export async function getAllGames(db: Database, publisherId?: number): Promise<Game[]> {
+    const query = baseGamesQuery(db);
+
+    if (publisherId !== undefined) {
+        query.where(eq(games.publisherId, publisherId));
+    }
+
+    const rows = await query.orderBy(asc(games.title));
     return rows.map(mapGame);
+}
+
+/** All games for a given publisher, ordered by title. */
+export async function getGamesByPublisher(db: Database, publisherId: number): Promise<Game[]> {
+    return getAllGames(db, publisherId);
+}
+
+/** Alias for publisher-based game lookups. */
+export async function getGamesByPublisherId(db: Database, publisherId: number): Promise<Game[]> {
+    return getGamesByPublisher(db, publisherId);
 }
 
 /** All game ids ordered by title. */
