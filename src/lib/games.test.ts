@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { createTestDatabase } from '../../db/test-helpers';
 import { categories, publishers, games } from '../../db/schema';
 import type { Database } from './db';
@@ -6,6 +7,8 @@ import {
     getAllGames,
     getAllGameIds,
     getGameById,
+    getGamesByPublisher,
+    getGamesByPublisherId,
 } from './games';
 
 async function seedGames(db: Database, count: number): Promise<void> {
@@ -50,6 +53,31 @@ describe('games data-access helpers', () => {
         const ids = await getAllGameIds(db);
         const all = await getAllGames(db);
         expect(ids).toEqual(all.map((g) => g.id));
+    });
+
+    it('returns only games for the selected publisher', async () => {
+        await db.insert(publishers).values([
+            { name: 'Pub One', description: 'pub one' },
+            { name: 'Pub Two', description: 'pub two' },
+        ]);
+
+        const [pubOne] = await db.select().from(publishers).where(eq(publishers.name, 'Pub One')).limit(1);
+        const [pubTwo] = await db.select().from(publishers).where(eq(publishers.name, 'Pub Two')).limit(1);
+        const [category] = await db.insert(categories).values({ name: 'Strategy', description: 'cat' }).returning({ id: categories.id });
+
+        await db.insert(games).values([
+            { title: 'Alpha', description: 'A', starRating: 4.2, categoryId: category.id, publisherId: pubOne.id },
+            { title: 'Beta', description: 'B', starRating: 4.5, categoryId: category.id, publisherId: pubTwo.id },
+            { title: 'Gamma', description: 'C', starRating: 4.1, categoryId: category.id, publisherId: pubOne.id },
+        ]);
+
+        const filtered = await getAllGames(db, pubOne.id);
+        const aliasFiltered = await getGamesByPublisher(db, pubOne.id);
+        const byIdFiltered = await getGamesByPublisherId(db, pubOne.id);
+
+        expect(filtered.map((game) => game.title)).toEqual(['Alpha', 'Gamma']);
+        expect(aliasFiltered.map((game) => game.title)).toEqual(['Alpha', 'Gamma']);
+        expect(byIdFiltered.map((game) => game.title)).toEqual(['Alpha', 'Gamma']);
     });
 
     it('fetches a single game by id', async () => {

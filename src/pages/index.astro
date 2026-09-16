@@ -5,10 +5,16 @@ import PageHero from '../components/PageHero.astro';
 import EmptyState from '../components/EmptyState.astro';
 import { getDatabase } from '../lib/db';
 import { getAllGames } from '../lib/games';
+import { getAllPublishers } from '../lib/publishers';
 
 export const prerender = true;
 
-const games = await getAllGames(getDatabase());
+const publishers = await getAllPublishers(getDatabase());
+const rawPublisherId = Astro.url.searchParams.get('publisher');
+const selectedPublisherId = rawPublisherId !== null && rawPublisherId !== '' ? Number(rawPublisherId) : null;
+const games = selectedPublisherId !== null && Number.isFinite(selectedPublisherId)
+  ? await getAllGames(getDatabase(), selectedPublisherId)
+  : await getAllGames(getDatabase());
 ---
 
 <Layout title="Tailspin Toys - Crowdfunding your new favorite game!">
@@ -18,16 +24,110 @@ const games = await getAllGames(getDatabase());
       subtitle="Find your next game! And maybe even back one! Explore our collection!"
     />
 
+    <div class="mb-8">
+      <form method="get" action="/" class="flex flex-col gap-3 md:flex-row md:items-end" data-testid="publisher-filter-form">
+        <div class="flex flex-col gap-2">
+          <label for="publisher-filter" class="text-sm font-medium text-slate-300">Filter by publisher</label>
+          <select
+            id="publisher-filter"
+            name="publisher"
+            data-testid="publisher-filter"
+            class="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">All publishers</option>
+            {publishers.map((publisher) => (
+              <option value={publisher.id} selected={selectedPublisherId === publisher.id}>
+                {publisher.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <button
+          type="submit"
+          data-testid="publisher-filter-submit"
+          class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white transition-colors hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          Apply Filter
+        </button>
+
+        {selectedPublisherId !== null && (
+          <a
+            href="/"
+            class="rounded-lg border border-slate-700 px-4 py-2 text-slate-200 transition-colors hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            data-testid="publisher-filter-clear"
+          >
+            Clear
+          </a>
+        )}
+      </form>
+    </div>
+
     <div>
       <h2 class="text-2xl font-medium mb-6 text-slate-100">Featured Games</h2>
 
-      {games.length === 0 ? (
-        <EmptyState text="No games available at the moment." />
-      ) : (
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6" data-testid="games-grid">
-          {games.map((game) => <GameCard game={game} />)}
-        </div>
-      )}
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6" data-testid="games-grid" hidden={games.length === 0}>
+        {games.map((game) => <GameCard game={game} />)}
+      </div>
+
+      <div hidden={games.length > 0}>
+        <EmptyState text={selectedPublisherId !== null ? 'No games available for this publisher.' : 'No games available at the moment.'} />
+      </div>
     </div>
   </div>
+
+  <script is:inline>
+    (() => {
+      const filterForm = document.querySelector('[data-testid="publisher-filter-form"]');
+      const filterSelect = document.querySelector('[data-testid="publisher-filter"]');
+      const gamesGrid = document.querySelector('[data-testid="games-grid"]');
+      const emptyState = document.querySelector('[data-testid="empty-state"]');
+
+      if (!filterForm || !filterSelect || !gamesGrid || !emptyState) {
+        return;
+      }
+
+      const syncVisibleGames = (publisherId) => {
+        const cards = [...document.querySelectorAll('[data-testid="game-card"]')];
+        let visibleCount = 0;
+
+        cards.forEach((card) => {
+          const shouldShow = !publisherId || card.dataset.publisherId === publisherId;
+          card.hidden = !shouldShow;
+          if (shouldShow) {
+            visibleCount += 1;
+          }
+        });
+
+        gamesGrid.hidden = visibleCount === 0;
+        emptyState.hidden = visibleCount > 0;
+      };
+
+      const onFilterChange = () => {
+        const selectedPublisherId = filterSelect.value;
+        const url = new URL(window.location.href);
+
+        if (selectedPublisherId) {
+          url.searchParams.set('publisher', selectedPublisherId);
+        } else {
+          url.searchParams.delete('publisher');
+        }
+
+        window.history.replaceState({}, '', url);
+        syncVisibleGames(selectedPublisherId || '');
+      };
+
+      filterForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        onFilterChange();
+      });
+
+      const initialValue = new URL(window.location.href).searchParams.get('publisher');
+      if (initialValue) {
+        filterSelect.value = initialValue;
+      }
+
+      syncVisibleGames(initialValue || '');
+    })();
+  </script>
 </Layout>

@@ -86,6 +86,31 @@ test.describe('Game Listing and Navigation', () => {
     });
   });
 
+  test('should filter the catalog by publisher', async ({ page }) => {
+    await test.step('Navigate to homepage and open the publisher filter', async () => {
+      await page.goto('/');
+      const filter = page.getByTestId('publisher-filter');
+      await expect(filter).toBeVisible();
+
+      const publisherOptions = await filter.locator('option').allTextContents();
+      const publishers = publisherOptions.filter((label) => label && label !== 'All publishers');
+      expect(publishers.length).toBeGreaterThan(0);
+
+      await filter.selectOption({ label: publishers[0] });
+      await page.getByTestId('publisher-filter-submit').click();
+    });
+
+    await test.step("Verify only the selected publisher's games are shown", async () => {
+      const visibleCards = page.locator('[data-testid="game-card"]:not([hidden])');
+      await expect(visibleCards.first()).toBeVisible();
+      expect(await visibleCards.count()).toBeGreaterThan(0);
+
+      const publisherNames = await visibleCards.locator('[data-testid="game-publisher"]').allTextContents();
+      expect(publisherNames.length).toBeGreaterThan(0);
+      expect(new Set(publisherNames).size).toBe(1);
+    });
+  });
+
   test('should display a button to back the game', async ({ page }) => {
     await test.step('Navigate to game details page', async () => {
       await page.goto('/game/1');
